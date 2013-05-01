@@ -1,6 +1,8 @@
 
 package co.cutely.musicgen;
 
+import java.io.IOException;
+import java.io.OutputStream;
 import java.util.HashMap;
 
 import javax.sound.sampled.AudioFormat;
@@ -11,9 +13,13 @@ import javax.sound.sampled.SourceDataLine;
 import co.cutely.musicgen.Synth.Tone;
 
 public class StringMusic {
+    private static final String NULL_STRING = "";
     private static final int HOLD_WEIGHT = 6;
+    private final String _input;
 
     public StringMusic(final String string) {
+        _input = string;
+
         // First, let's filter the string to only the values we want
         final StringBuilder sb = new StringBuilder();
         for (final char c : string.toLowerCase().toCharArray()) {
@@ -48,9 +54,32 @@ public class StringMusic {
             }
             ++i;
         }
+    }
 
+    @Override
+    public boolean equals(final Object obj) {
+        if (obj instanceof String) {
+            final String string = (String) obj;
+            return (_input == null) ? false : _input.equals(string);
+        } else {
+            return super.equals(obj);
+        }
+    }
+
+    @Override
+    public int hashCode() {
+        return (_input == null) ? NULL_STRING.hashCode() : _input.hashCode();
+    }
+
+    public void play() {
         for (final Tone t : _synth.getSequence()) {
             playTone(t);
+        }
+    }
+
+    public void encode(final OutputStream os) {
+        for (final Tone t : _synth.getSequence()) {
+            writeTone(t, os);
         }
     }
 
@@ -88,6 +117,37 @@ public class StringMusic {
             sdl.stop();
             sdl.close();
         } catch (LineUnavailableException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        }
+    }
+
+    private void writeTone(final Tone t, final OutputStream os) {
+        byte[] buf;
+
+        try {
+            final int samples = 3 * (int) (t.length() * (float) 44100 / 1000);
+            final int in = (int) (10 * (float) 44100 / 1000);
+            double vol = 0;
+
+            buf = new byte[samples * 2];
+
+            for (int i = 0; i < samples; i += 2) {
+                if (i < in) {
+                    vol = ((double) i) / in;
+                } else if (i + in > samples) {
+                    vol = ((double) samples - i) / in;
+                } else {
+                    vol = 1;
+                }
+
+                double angle = i / ((float) 44100 / (t.freq() / 2)) * Math.PI;
+                short value = (short) (Math.sin(angle) * vol * Short.MAX_VALUE);
+                buf[i] = (byte) (value & 0x00ff);
+                buf[i + 1] = (byte) ((value >> 8) & 0x00ff);
+            }
+            os.write(buf, 0, buf.length);
+        } catch (IOException e) {
             // TODO Auto-generated catch block
             e.printStackTrace();
         }
